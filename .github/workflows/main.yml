@@ -1,0 +1,57 @@
+name: Build IPA (No Signing)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set Xcode version
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Install dependencies (if any)
+        run: |
+          if [ -f Podfile ]; then
+            sudo gem install cocoapods
+            pod install
+          fi
+
+      - name: Build archive
+        run: |
+          xcodebuild \
+            -project Tether.xcodeproj \
+            -scheme Tether \
+            -configuration Release \
+            -archivePath $PWD/build/Tether.xcarchive \
+            archive \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Export IPA
+        run: |
+          mkdir -p build/ipa
+          xcodebuild -exportArchive \
+            -archivePath $PWD/build/Tether.xcarchive \
+            -exportOptionsPlist ExportOptions.plist \
+            -exportPath $PWD/build/ipa \
+            CODE_SIGNING_ALLOWED=NO || true
+
+      - name: Create fake IPA (fallback)
+        run: |
+          mkdir -p Payload
+          cp -r build/Tether.xcarchive/Products/Applications/*.app Payload/
+          zip -r Tether.ipa Payload
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tether-IPA
+          path: |
+            build/ipa/*.ipa
+            Tether.ipa
